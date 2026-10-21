@@ -84,6 +84,31 @@ st.markdown(
     [data-baseweb="menu"] li, [data-baseweb="menu"] li * { color: #1F2937 !important; background: transparent !important; }
     [data-baseweb="menu"] li:hover, [data-baseweb="menu"] li[aria-selected="true"] { background: #EEF2FF !important; }
 
+    /* "Thinking" indicator */
+    .thinking {
+        display: inline-flex; align-items: center; gap: 12px;
+        padding: 10px 18px; border-radius: 999px;
+        background: #F3F1FF; border: 1px solid #E0DCFF;
+        font-weight: 600;
+        animation: pulse-glow 2s ease-in-out infinite;
+    }
+    .thinking, .thinking * { color: #5B52E0 !important; }
+    .thinking .dots span {
+        display: inline-block; width: 8px; height: 8px; margin: 0 2px;
+        border-radius: 50%; background: #6C63FF;
+        animation: bounce-dot 1.2s infinite ease-in-out;
+    }
+    .thinking .dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking .dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce-dot {
+        0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+        40% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes pulse-glow {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(108, 99, 255, 0.25); }
+        50% { box-shadow: 0 0 0 8px rgba(108, 99, 255, 0); }
+    }
+
     /* Buttons keep white text (must come last) */
     .stButton > button, .stButton > button * { color: #FFFFFF !important; }
     </style>
@@ -187,6 +212,31 @@ def show_error(e):
         st.error(f"Something went wrong: {e}")
 
 
+THINKING_HTML = (
+    '<div class="thinking"><span>{msg}</span>'
+    '<span class="dots"><span></span><span></span><span></span></span></div>'
+)
+
+
+def run_with_indicator(contents, system, message="✨ Gemini is thinking"):
+    """Show an animated 'working' pill until the first words arrive, then stream the answer."""
+    holder = st.empty()
+    holder.markdown(THINKING_HTML.replace("{msg}", message), unsafe_allow_html=True)
+
+    def gen():
+        first = True
+        try:
+            for chunk in stream_reply(contents, system):
+                if first:
+                    holder.empty()
+                    first = False
+                yield chunk
+        finally:
+            holder.empty()
+
+    return st.write_stream(gen())
+
+
 # ---------- Tabs ----------
 chat_tab, tools_tab = st.tabs(["💬 Chat", "🛠️ Writing Tools"])
 
@@ -214,8 +264,8 @@ with chat_tab:
 
         with st.chat_message("assistant"):
             try:
-                reply = st.write_stream(
-                    stream_reply(history, "You are a friendly, clear and helpful assistant.")
+                reply = run_with_indicator(
+                    history, "You are a friendly, clear and helpful assistant."
                 )
                 st.session_state.messages.append({"role": "assistant", "content": reply})
             except Exception as e:
@@ -281,6 +331,6 @@ with tools_tab:
             instruction = TASKS[task].replace("{lang}", language.strip())
             with st.container(border=True):
                 try:
-                    st.write_stream(stream_reply(text, instruction))
+                    run_with_indicator(text, instruction, "✨ Crafting your result")
                 except Exception as e:
                     show_error(e)
