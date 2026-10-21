@@ -5,6 +5,7 @@ A light, clean Streamlit app powered by Google's Gemini Flash model.
 **Features**
 - 💬 Streaming chat assistant with memory of the conversation
 - 🛠️ Writing tools: summarize, rewrite professionally, explain simply, fix grammar
+- 📎 Upload PDF, Word, TXT, Markdown, CSV or image files and run any writing tool on them
 - 🎨 Light, modern interface
 
 ## Run locally
