@@ -78,6 +78,12 @@ st.markdown(
     [data-testid="stChatInputSubmitButton"] { background: #6C63FF !important; border-radius: 10px; }
     [data-testid="stChatInputSubmitButton"] * { color: #FFFFFF !important; }
 
+    /* Dropdown menus */
+    [data-baseweb="popover"], [data-baseweb="popover"] > div,
+    [data-baseweb="menu"], [data-baseweb="menu"] ul { background: #FFFFFF !important; }
+    [data-baseweb="menu"] li, [data-baseweb="menu"] li * { color: #1F2937 !important; background: transparent !important; }
+    [data-baseweb="menu"] li:hover, [data-baseweb="menu"] li[aria-selected="true"] { background: #EEF2FF !important; }
+
     /* Buttons keep white text (must come last) */
     .stButton > button, .stButton > button * { color: #FFFFFF !important; }
     </style>
@@ -216,25 +222,65 @@ with chat_tab:
                 show_error(e)
 
 # ----- Writing tools -----
+TASKS = {
+    # --- Basics ---
+    "📝 Summarize": "Summarize the text in a few clear bullet points.",
+    "✨ Rewrite professionally": "Rewrite the text in a polished, professional tone. Keep the meaning.",
+    "🧒 Explain like I'm 12": "Explain the text in very simple words a 12-year-old would understand.",
+    "✅ Fix grammar": "Fix spelling and grammar only. Return just the corrected text.",
+    # --- Learn ---
+    "🎓 Explain at expert level (with references)": (
+        "Explain the topic or text at an advanced, expert level with precise terminology and depth. "
+        "End with a 'Further reading' section suggesting well-known books, papers, or reputable "
+        "organizations and websites the reader can search for. Do NOT invent links or citations; "
+        "if you are not sure a source exists, say so."
+    ),
+    "🧠 Explain with analogies": "Explain the text using 3 vivid everyday analogies, then a one-line recap.",
+    "📚 Make study notes": "Turn the text into well-organized study notes with headings, bullets and key terms in bold.",
+    "🃏 Make flashcards": "Create 10 flashcards from the text in the format 'Q: ... / A: ...'.",
+    "🧩 Make a quiz (5 questions)": (
+        "Create a 5-question multiple-choice quiz from the text. Give 4 options per question, "
+        "then an answer key with a one-line explanation for each."
+    ),
+    "🗺️ Mind-map outline": "Turn the text into a hierarchical mind-map outline using nested bullets.",
+    "❓ Questions to think about": "Write 8 thought-provoking discussion questions based on the text, from easy to deep.",
+    # --- Create ---
+    "🤯 Interesting facts & trivia": (
+        "Give 8 surprising, interesting facts or trivia related to the text's topic. "
+        "Only include facts you are confident are true."
+    ),
+    "📖 Turn into a short story": "Turn the ideas in the text into an engaging short story of about 250 words.",
+    "🎭 Turn into a poem": "Turn the text into a creative poem with a clear theme and rhythm.",
+    "📱 Social media post": "Write a catchy social media post from the text with a hook, short lines, emojis and 5 hashtags.",
+    "💼 LinkedIn post": "Write an engaging, professional LinkedIn post from the text with a strong first line and a closing question.",
+    "📧 Draft an email": "Turn the text into a clear, polite email with a subject line.",
+    "🎤 Presentation script": "Turn the text into a 2-minute spoken presentation script with an opening, 3 main points and a closing.",
+    "🏷️ Title & headline ideas": "Suggest 10 creative titles/headlines for the text, mixing serious, catchy and curious styles.",
+    # --- Think ---
+    "🎯 Key takeaways & action items": "List the key takeaways, then a short checklist of concrete action items.",
+    "⚖️ Pros and cons": "List the main pros and cons of the ideas in the text in two clear sections, then give a balanced verdict.",
+    "🔍 Critique & counter-arguments": "Critically review the text: point out weak spots, missing evidence, and the strongest counter-arguments.",
+    "🌍 Translate": "Translate the text into {lang}. Keep the tone and meaning. Return only the translation.",
+}
+
 with tools_tab:
-    task = st.selectbox(
-        "What would you like to do?",
-        ["Summarize", "Rewrite professionally", "Explain like I'm 12", "Fix grammar"],
-    )
-    prompts = {
-        "Summarize": "Summarize the text in a few clear bullet points.",
-        "Rewrite professionally": "Rewrite the text in a polished, professional tone. Keep the meaning.",
-        "Explain like I'm 12": "Explain the text in very simple words a 12-year-old would understand.",
-        "Fix grammar": "Fix spelling and grammar only. Return just the corrected text.",
-    }
+    task = st.selectbox("What would you like to do?", list(TASKS.keys()))
+    language = ""
+    if task == "🌍 Translate":
+        language = st.text_input("Translate into which language?", placeholder="e.g. Urdu, French, Arabic")
+    if task.startswith("🎓"):
+        st.caption("ℹ️ References are suggestions from the AI. Please verify them before relying on them.")
     text = st.text_area("Paste your text here", height=200)
 
     if st.button("Run ✨"):
         if not text.strip():
             st.warning("Please paste some text first.")
+        elif task == "🌍 Translate" and not language.strip():
+            st.warning("Please type the language to translate into.")
         else:
+            instruction = TASKS[task].replace("{lang}", language.strip())
             with st.container(border=True):
                 try:
-                    st.write_stream(stream_reply(text, prompts[task]))
+                    st.write_stream(stream_reply(text, instruction))
                 except Exception as e:
                     show_error(e)
