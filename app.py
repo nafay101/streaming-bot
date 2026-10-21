@@ -1,3 +1,4 @@
+import io
 import re
 import time
 import streamlit as st
@@ -108,6 +109,17 @@ st.markdown(
         0%, 100% { box-shadow: 0 0 0 0 rgba(108, 99, 255, 0.25); }
         50% { box-shadow: 0 0 0 8px rgba(108, 99, 255, 0); }
     }
+
+    /* File uploader */
+    [data-testid="stFileUploaderDropzone"] {
+        background: #FFFFFF !important; border: 2px dashed #C9C5FF !important; border-radius: 16px !important;
+    }
+    [data-testid="stFileUploaderFile"] { background: #F3F1FF !important; border-radius: 12px; }
+    [data-testid="stFileUploaderDropzone"] button {
+        background: linear-gradient(90deg, #6C63FF, #8B7CFF) !important;
+        border: none !important; border-radius: 12px !important;
+    }
+    [data-testid="stFileUploaderDropzone"] button, [data-testid="stFileUploaderDropzone"] button * { color: #FFFFFF !important; }
 
     /* Buttons keep white text (must come last) */
     .stButton > button, .stButton > button * { color: #FFFFFF !important; }
@@ -237,6 +249,39 @@ def run_with_indicator(contents, system, message="✨ Gemini is thinking"):
     return st.write_stream(gen())
 
 
+FILE_TYPES = ["pdf", "docx", "txt", "md", "csv", "png", "jpg", "jpeg"]
+IMAGE_MIME = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}
+MAX_MB = 15
+
+
+def prepare_file(f):
+    """Turn an uploaded file into model input. Returns (contents, error_message)."""
+    data = f.getvalue()
+    if len(data) > MAX_MB * 1024 * 1024:
+        return None, f"This file is too large. Please keep it under {MAX_MB} MB."
+    ext = f.name.rsplit(".", 1)[-1].lower()
+    try:
+        if ext == "pdf":  # Gemini reads PDFs (even scanned ones) directly
+            return [types.Part.from_bytes(data=data, mime_type="application/pdf"), "Here is the document."], None
+        if ext in IMAGE_MIME:  # Gemini can read text and content in images
+            return [types.Part.from_bytes(data=data, mime_type=IMAGE_MIME[ext]), "Here is the image."], None
+        if ext == "docx":
+            from docx import Document
+            doc = Document(io.BytesIO(data))
+            lines = [p.text for p in doc.paragraphs if p.text.strip()]
+            for table in doc.tables:
+                for row in table.rows:
+                    lines.append(" | ".join(c.text for c in row.cells))
+            text = "\n".join(lines)
+        else:  # txt, md, csv
+            text = data.decode("utf-8", errors="ignore")
+    except Exception as e:
+        return None, f"Couldn't read this file: {e}"
+    if not text.strip():
+        return None, "No readable text was found in this file."
+    return text, None
+
+
 # ---------- Tabs ----------
 chat_tab, tools_tab = st.tabs(["💬 Chat", "🛠️ Writing Tools"])
 
@@ -320,17 +365,36 @@ with tools_tab:
         language = st.text_input("Translate into which language?", placeholder="e.g. Urdu, French, Arabic")
     if task.startswith("🎓"):
         st.caption("ℹ️ References are suggestions from the AI. Please verify them before relying on them.")
-    text = st.text_area("Paste your text here", height=200)
+    source = st.radio("Input", ["✍️ Paste text", "📎 Upload file"], horizontal=True,
+                      label_visibility="collapsed")
+    text, uploaded = "", None
+    if source == "✍️ Paste text":
+        text = st.text_area("Paste your text here", height=200)
+    else:
+        uploaded = st.file_uploader("Upload a document or image", type=FILE_TYPES)
+        st.caption(f"Supported: PDF, Word (.docx), TXT, Markdown, CSV, PNG, JPG · up to {MAX_MB} MB")
 
     if st.button("Run ✨"):
-        if not text.strip():
-            st.warning("Please paste some text first.")
-        elif task == "🌍 Translate" and not language.strip():
-            st.warning("Please type the language to translate into.")
+        content, problem = None, None
+        if source == "✍️ Paste text":
+            if text.strip():
+                content = text
+            else:
+                problem = "Please paste some text first."
+        elif uploaded is None:
+            problem = "Please upload a file first."
+        else:
+            content, problem = prepare_file(uploaded)
+
+        if not problem and task == "🌍 Translate" and not language.strip():
+            problem = "Please type the language to translate into."
+
+        if problem:
+            st.warning(problem)
         else:
             instruction = TASKS[task].replace("{lang}", language.strip())
             with st.container(border=True):
                 try:
-                    run_with_indicator(text, instruction, "✨ Crafting your result")
+                    run_with_indicator(content, instruction, "✨ Crafting your result")
                 except Exception as e:
                     show_error(e)
