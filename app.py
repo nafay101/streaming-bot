@@ -89,7 +89,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-MODEL_OPTIONS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+MODEL_OPTIONS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"]
 
 # ---------- Sidebar ----------
 with st.sidebar:
@@ -105,10 +105,10 @@ with st.sidebar:
                                 help="Get a free key at aistudio.google.com")
 
     chosen = st.selectbox("Model", MODEL_OPTIONS)
-    custom = st.text_input("Custom model name (optional)", placeholder="e.g. gemini-2.5-flash",
+    custom = st.text_input("Custom model name (optional)", placeholder="e.g. gemini-3.8-flash",
                            help="Leave empty to use the model selected above.")
     model = custom.strip() or chosen
-    temperature = st.slider("Creativity", 0.0, 1.5, 0.7, 0.1)
+    temperature = st.slider("Creativity", 0.0, 2.0, 1.0, 0.1)
 
     if st.button("🗑️ Clear chat"):
         st.session_state.messages = []
@@ -152,10 +152,11 @@ def stream_reply(contents, system):
                 text = str(e)
                 quota = "429" in text or "RESOURCE_EXHAUSTED" in text
                 overloaded = "503" in text or "UNAVAILABLE" in text
-                if got_text or not (quota or overloaded):
+                missing = "404" in text or "NOT_FOUND" in text
+                if got_text or not (quota or overloaded or missing):
                     raise
-                if quota:
-                    break  # this model's quota is used up -> try the next model
+                if quota or missing:
+                    break  # quota used up or model retired -> try the next model
                 time.sleep(2 ** attempt)  # overloaded: wait 1s, 2s, 4s and retry
     raise last_error
 
@@ -170,6 +171,8 @@ def show_error(e):
             f"Please wait {wait} and try again. If it keeps happening, you may have used "
             f"up today's free quota. It resets daily."
         )
+    elif "404" in msg or "NOT_FOUND" in msg:
+        st.error("This model name isn't available any more. Pick another model in the sidebar.")
     elif "503" in msg or "UNAVAILABLE" in msg:
         st.warning("Google's servers are very busy right now. Please wait a few seconds and try again.")
     elif any(k in msg for k in ("API key", "API_KEY", "401", "403")):
