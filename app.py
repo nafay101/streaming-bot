@@ -43,6 +43,34 @@ st.markdown(
         box-shadow: 0 2px 8px rgba(108, 99, 255, 0.06);
     }
     textarea { border-radius: 12px !important; }
+
+    /* ---- Force readable dark text (works even if Streamlit is in dark mode) ---- */
+    .stApp, .stApp p, .stApp li, .stApp label, .stApp span,
+    .stApp h2, .stApp h3, .stApp h4, .stApp code,
+    [data-testid="stMarkdownContainer"] *,
+    [data-testid="stChatMessage"] *,
+    [data-testid="stSidebar"] * { color: #1F2937 !important; }
+
+    .hero p { color: #6B7280 !important; }
+    .hero h1 { -webkit-text-fill-color: transparent !important; }
+
+    /* Tabs */
+    .stTabs [data-baseweb="tab"] p { color: #4B5563 !important; font-weight: 600; }
+    .stTabs [aria-selected="true"] p { color: #6C63FF !important; }
+    .stTabs [data-baseweb="tab-highlight"] { background-color: #6C63FF !important; }
+
+    /* Inputs: chat box, text area, text input, dropdowns */
+    [data-testid="stChatInput"] { background: #FFFFFF !important; border: 1px solid #D9DDF5; border-radius: 16px; }
+    [data-testid="stChatInput"] textarea { background: #FFFFFF !important; color: #1F2937 !important; }
+    [data-testid="stChatInput"] textarea::placeholder { color: #9CA3AF !important; }
+    [data-testid="stBottom"], [data-testid="stBottom"] > div { background: transparent !important; }
+    textarea, input { background: #FFFFFF !important; color: #1F2937 !important; }
+    [data-baseweb="select"] > div { background: #FFFFFF !important; }
+    [data-baseweb="select"] * { color: #1F2937 !important; }
+    [data-testid="stHeader"] { background: transparent !important; }
+
+    /* Buttons keep white text (must come last) */
+    .stButton > button, .stButton > button * { color: #FFFFFF !important; }
     </style>
     <div class="hero">
         <h1>✨ Gemini Flash Studio</h1>
@@ -65,7 +93,7 @@ with st.sidebar:
         api_key = st.text_input("Gemini API key", type="password",
                                 help="Get a free key at aistudio.google.com")
 
-    model = st.selectbox("Model", ["gemini-3.8-flash", "gemini-2.5-flash-lite"])
+    model = st.selectbox("Model", ["gemini-2.5-flash", "gemini-2.5-flash-lite"])
     temperature = st.slider("Creativity", 0.0, 1.5, 0.7, 0.1)
 
     if st.button("🗑️ Clear chat"):
