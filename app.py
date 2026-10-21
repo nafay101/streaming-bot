@@ -1,3 +1,5 @@
+import re
+import time
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -69,6 +71,13 @@ st.markdown(
     [data-baseweb="select"] * { color: #1F2937 !important; }
     [data-testid="stHeader"] { background: transparent !important; }
 
+    /* Chat input: remove dark outer box */
+    [data-testid="stChatInput"] > div,
+    [data-testid="stChatInput"] div[data-baseweb="textarea"],
+    [data-testid="stChatInput"] div[data-baseweb="base-input"] { background: #FFFFFF !important; }
+    [data-testid="stChatInputSubmitButton"] { background: #6C63FF !important; border-radius: 10px; }
+    [data-testid="stChatInputSubmitButton"] * { color: #FFFFFF !important; }
+
     /* Buttons keep white text (must come last) */
     .stButton > button, .stButton > button * { color: #FFFFFF !important; }
     </style>
@@ -79,6 +88,8 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+MODEL_OPTIONS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
 
 # ---------- Sidebar ----------
 with st.sidebar:
@@ -93,7 +104,10 @@ with st.sidebar:
         api_key = st.text_input("Gemini API key", type="password",
                                 help="Get a free key at aistudio.google.com")
 
-    model = st.selectbox("Model", ["gemini-3.5-flash", "gemini-2.5-flash-lite"])
+    chosen = st.selectbox("Model", MODEL_OPTIONS)
+    custom = st.text_input("Custom model name (optional)", placeholder="e.g. gemini-2.5-flash",
+                           help="Leave empty to use the model selected above.")
+    model = custom.strip() or chosen
     temperature = st.slider("Creativity", 0.0, 1.5, 0.7, 0.1)
 
     if st.button("🗑️ Clear chat"):
@@ -109,11 +123,59 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 
+def wait_seconds(msg):
+    """Read 'retry in 18s' style hints out of a Google error message."""
+    m = re.search(r"retry in (\d+(?:\.\d+)?)s", msg) or re.search(r"'retryDelay': '(\d+)s'", msg)
+    return int(float(m.group(1))) + 1 if m else None
+
+
 def stream_reply(contents, system):
+    """Stream a reply. Retries when Google is overloaded (503) and
+    switches to another model when the free quota (429) is used up."""
     config = types.GenerateContentConfig(system_instruction=system, temperature=temperature)
-    for chunk in client.models.generate_content_stream(model=model, contents=contents, config=config):
-        if chunk.text:
-            yield chunk.text
+    models_to_try = [model] + [m for m in MODEL_OPTIONS if m != model]
+    last_error = None
+
+    for m in models_to_try:
+        for attempt in range(3):
+            got_text = False
+            try:
+                for chunk in client.models.generate_content_stream(
+                    model=m, contents=contents, config=config
+                ):
+                    if chunk.text:
+                        got_text = True
+                        yield chunk.text
+                return
+            except Exception as e:
+                last_error = e
+                text = str(e)
+                quota = "429" in text or "RESOURCE_EXHAUSTED" in text
+                overloaded = "503" in text or "UNAVAILABLE" in text
+                if got_text or not (quota or overloaded):
+                    raise
+                if quota:
+                    break  # this model's quota is used up -> try the next model
+                time.sleep(2 ** attempt)  # overloaded: wait 1s, 2s, 4s and retry
+    raise last_error
+
+
+def show_error(e):
+    msg = str(e)
+    if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+        secs = wait_seconds(msg)
+        wait = f"about {secs} seconds" if secs else "a minute"
+        st.warning(
+            f"⏳ Free-tier limit reached (only a few requests per minute are allowed). "
+            f"Please wait {wait} and try again. If it keeps happening, you may have used "
+            f"up today's free quota. It resets daily."
+        )
+    elif "503" in msg or "UNAVAILABLE" in msg:
+        st.warning("Google's servers are very busy right now. Please wait a few seconds and try again.")
+    elif any(k in msg for k in ("API key", "API_KEY", "401", "403")):
+        st.error("Your API key looks invalid. Please check it in the sidebar.")
+    else:
+        st.error(f"Something went wrong: {e}")
 
 
 # ---------- Tabs ----------
@@ -148,7 +210,7 @@ with chat_tab:
                 )
                 st.session_state.messages.append({"role": "assistant", "content": reply})
             except Exception as e:
-                st.error(f"Something went wrong: {e}")
+                show_error(e)
 
 # ----- Writing tools -----
 with tools_tab:
@@ -172,4 +234,4 @@ with tools_tab:
                 try:
                     st.write_stream(stream_reply(text, prompts[task]))
                 except Exception as e:
-                    st.error(f"Something went wrong: {e}")
+                    show_error(e)
