@@ -93,7 +93,7 @@ with st.sidebar:
         api_key = st.text_input("Gemini API key", type="password",
                                 help="Get a free key at aistudio.google.com")
 
-    model = st.selectbox("Model", ["gemini-2.5-flash", "gemini-2.5-flash-lite"])
+    model = st.selectbox("Model", ["gemini-3.8-flash", "gemini-2.5-flash-lite"])
     temperature = st.slider("Creativity", 0.0, 1.5, 0.7, 0.1)
 
     if st.button("🗑️ Clear chat"):
